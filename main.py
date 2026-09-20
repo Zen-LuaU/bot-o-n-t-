@@ -1,17 +1,37 @@
 import asyncio
 import os
 import random
+from threading import Thread
 from discord.ext import commands
 from dotenv import load_dotenv
+from flask import Flask
 
-# Tải biến môi trường từ file .env
+# --- CẤU HÌNH FLASK SERVER (CỔNG 10000) ---
+app = Flask(__name__)
+
+
+@app.route("/")
+def home():
+    return "Bot đang hoạt động!"
+
+
+def run_flask():
+    # Chạy Flask app trên cổng 10000
+    app.run(host="0.0.0.0", port=10000)
+
+
+def keep_alive():
+    t = Thread(target=run_flask)
+    t.daemon = True
+    t.start()
+
+
+# --- CẤU HÌNH DISCORD BOT ---
 load_dotenv()
 
-# Cấu hình Intents (Quyền cho Bot)
 intents = commands.Intents.default()
-intents.message_content = True  # Bắt buộc bật Message Content Intent trong Discord Developer Portal
+intents.message_content = True
 
-# Khởi tạo Bot với tiền tố lệnh là !
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
@@ -22,12 +42,10 @@ async def on_ready():
 
 @bot.command(name="start")
 async def start_quiz(ctx):
-    # Tạo ngẫu nhiên 2 số và 1 phép tính
     num1 = random.randint(1, 20)
     num2 = random.randint(1, 20)
     operator = random.choice(["+", "-", "*"])
 
-    # Tính toán đáp án đúng
     if operator == "+":
         correct_answer = num1 + num2
     elif operator == "-":
@@ -35,6 +53,42 @@ async def start_quiz(ctx):
     else:
         correct_answer = num1 * num2
 
+    await ctx.send(
+        f"❓ **Câu hỏi:** {num1} {operator} {num2} = ?\n*(Bạn có 15 giây để trả lời)*"
+    )
+
+    def check(message):
+        return message.author == ctx.author and message.channel == ctx.channel
+
+    try:
+        msg = await bot.wait_for("message", timeout=15.0, check=check)
+
+        if msg.content.strip().lstrip("-").isdigit():
+            user_answer = int(msg.content.strip())
+            if user_answer == correct_answer:
+                await ctx.send(
+                    f"🎉 Chúc mừng {ctx.author.mention}! Bạn đã trả lời chính xác."
+                )
+            else:
+                await ctx.send(
+                    f"❌ Sai rồi {ctx.author.mention}! Đáp án đúng là: **{correct_answer}**."
+                )
+        else:
+            await ctx.send(
+                f"⚠️ {ctx.author.mention}, vui lòng chỉ nhập đáp án là một số!"
+            )
+
+    except asyncio.TimeoutError:
+        await ctx.send(
+            f"⏰ Hết thời gian! {ctx.author.mention} đã không đưa ra câu trả lời. Đáp án đúng là: **{correct_answer}**."
+        )
+
+
+# --- KÍCH HOẠT FLASK VÀ CHẠY BOT ---
+if __name__ == "__main__":
+    keep_alive()  # Khởi chạy Flask server cổng 10000 trước khi khởi động bot
+    bot.run(os.getenv("TOKEN"))
+    
     # Gửi câu hỏi vào kênh Discord
     await ctx.send(f"❓ **Câu hỏi:** {num1} {operator} {num2} = ?\n*(Bạn có 15 giây để trả lời)*")
 
