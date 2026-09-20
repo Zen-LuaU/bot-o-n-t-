@@ -1,4 +1,4 @@
 discord.py
-flask10000
+flask
 python-dotenv
 gunicorn
